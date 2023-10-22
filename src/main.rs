@@ -33,19 +33,20 @@ fn main() -> Result<(), eframe::Error> {
 
 struct ChampionsCostumeManager {
     costumes: Vec<String>,
-    selected_costume: String,
+    selected_costume: Option<String>,
 }
 
 impl ChampionsCostumeManager {
     fn new(_cc: &eframe::CreationContext) -> Self {
         let costumes = get_saved_costumes(Path::new(COSTUME_SAVES_PATH));
         Self {
-            selected_costume: costumes[0].to_owned(),
+            selected_costume: None,
             costumes,
         }
     }
 }
 
+// TODO refactor to pull the image details and costume selection out into their own components
 impl eframe::App for ChampionsCostumeManager {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // IMAGE DETAILS PANEL
@@ -53,18 +54,24 @@ impl eframe::App for ChampionsCostumeManager {
             .resizable(false)
             .min_width(250.0)
             .show(ctx, |ui| {
-                ui.add(
-                    egui::Image::new(&self.selected_costume)
-                        .rounding(10.0)
-                        .maintain_aspect_ratio(true)
-                        .shrink_to_fit()
-                );
+                if let Some(selected_costume) = &self.selected_costume {
+                    ui.add(
+                        egui::Image::new(selected_costume)
+                            .rounding(10.0)
+                            .maintain_aspect_ratio(true)
+                            .shrink_to_fit()
+                    );
 
-                egui::TopBottomPanel::top("costume_details_panel").show_inside(ui, |ui| {
-                    ui.label("Placeholder Name");
-                    ui.label("Placeholder Character");
-                    ui.label("Placeholder Owner");
-                });
+                    egui::TopBottomPanel::top("costume_details_panel").show_inside(ui, |ui| {
+                        ui.label("Placeholder Name");
+                        ui.label("Placeholder Character");
+                        ui.label("Placeholder Owner");
+                    });
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.label("Select an image to edit details")
+                    });
+                }
             });
 
         // COSTUME SELECTION
@@ -82,7 +89,7 @@ impl eframe::App for ChampionsCostumeManager {
 
                         if ui.add(egui::ImageButton::new(costume_image)).clicked() {
                             // set selected costume
-                            self.selected_costume = costume.to_owned();
+                            self.selected_costume = Some(costume.to_owned());
                         }
                     }
                 });
