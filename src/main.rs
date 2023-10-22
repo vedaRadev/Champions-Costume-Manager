@@ -62,10 +62,20 @@ impl eframe::App for ChampionsCostumeManager {
                             .shrink_to_fit()
                     );
 
-                    egui::TopBottomPanel::top("costume_details_panel").show_inside(ui, |ui| {
-                        ui.label("Placeholder Name");
-                        ui.label("Placeholder Character");
-                        ui.label("Placeholder Owner");
+                    ui.separator();
+
+                    ui.label("Placeholder Name");
+                    ui.label("Placeholder Character");
+                    ui.label("Placeholder Owner");
+
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_align(egui::Align::Center), |ui| {
+                        if ui.button("Edit").clicked() {
+                            // TODO
+                        }
+
+                        if ui.button("Delete").clicked() {
+                            // TODO
+                        }
                     });
                 } else {
                     ui.centered_and_justified(|ui| {
@@ -76,23 +86,21 @@ impl eframe::App for ChampionsCostumeManager {
 
         // COSTUME SELECTION
         egui::CentralPanel::default().show(ctx, |ui| {
-            let panel_width = ui.available_width();
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.set_min_width(panel_width);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for costume in &self.costumes {
+                            let costume_image = egui::Image::new(costume)
+                                .rounding(10.0)
+                                .fit_to_original_size(0.5)
+                                .maintain_aspect_ratio(true);
 
-                ui.horizontal_wrapped(|ui| {
-                    for costume in &self.costumes {
-                        let costume_image = egui::Image::new(costume)
-                            .rounding(10.0)
-                            .fit_to_original_size(0.5)
-                            .maintain_aspect_ratio(true);
-
-                        if ui.add(egui::ImageButton::new(costume_image)).clicked() {
-                            // set selected costume
-                            self.selected_costume = Some(costume.to_owned());
+                            if ui.add(egui::ImageButton::new(costume_image)).clicked() {
+                                self.selected_costume = Some(costume.to_owned());
+                            }
                         }
-                    }
-                });
+                    });
             });
         });
     }
