@@ -10,7 +10,7 @@ const COSTUME_SAVES_PATH: &str = "/mnt/c/Program Files (x86)/Steam/steamapps/com
 // * Actual error handling, maybe return a result containing the vec.
 fn get_saved_costumes(saves_dir: &Path) -> Vec<String> {
     fs::read_dir(saves_dir).unwrap()
-        .map(|p| String::from(p.unwrap().path().to_str().unwrap()))
+        .map(|p| format!("file://{}", String::from(p.unwrap().path().to_str().unwrap())))
         .collect()
 }
 
@@ -32,13 +32,16 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct ChampionsCostumeManager {
-    costume_saves: Vec<String>
+    costumes: Vec<String>,
+    selected_costume: String,
 }
 
 impl ChampionsCostumeManager {
     fn new(_cc: &eframe::CreationContext) -> Self {
+        let costumes = get_saved_costumes(Path::new(COSTUME_SAVES_PATH));
         Self {
-            costume_saves: get_saved_costumes(Path::new(COSTUME_SAVES_PATH))
+            selected_costume: costumes[0].to_owned(),
+            costumes,
         }
     }
 }
@@ -51,7 +54,7 @@ impl eframe::App for ChampionsCostumeManager {
             .min_width(250.0)
             .show(ctx, |ui| {
                 ui.add(
-                    egui::Image::new(format!("file://{}", &self.costume_saves[0]))
+                    egui::Image::new(&self.selected_costume)
                         .rounding(10.0)
                         .maintain_aspect_ratio(true)
                         .shrink_to_fit()
@@ -71,13 +74,16 @@ impl eframe::App for ChampionsCostumeManager {
                 ui.set_min_width(panel_width);
 
                 ui.horizontal_wrapped(|ui| {
-                    for costume in &self.costume_saves {
-                        ui.add(
-                            egui::Image::new(format!("file://{}", costume))
-                                .rounding(10.0)
-                                .fit_to_original_size(0.5)
-                                .maintain_aspect_ratio(true)
-                        );
+                    for costume in &self.costumes {
+                        let costume_image = egui::Image::new(costume)
+                            .rounding(10.0)
+                            .fit_to_original_size(0.5)
+                            .maintain_aspect_ratio(true);
+
+                        if ui.add(egui::ImageButton::new(costume_image)).clicked() {
+                            // set selected costume
+                            self.selected_costume = costume.to_owned();
+                        }
                     }
                 });
             });
