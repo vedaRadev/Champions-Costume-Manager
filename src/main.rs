@@ -1,8 +1,8 @@
 use std::{ fs, path::Path };
 use eframe::egui;
-// use rfd::FileDialog;
+use rfd::FileDialog;
 
-const COSTUME_SAVES_PATH: &str = "/mnt/c/Program Files (x86)/Steam/steamapps/common/Champions Online/Champions Online/Live/screenshots";
+const DEFAULT_COSTUME_DIR: &str = "/mnt/c/Program Files (x86)/Steam/steamapps/common/Champions Online/Champions Online/Live/screenshots";
 
 // TODO
 // * Only return files that are valid costume saves.
@@ -32,16 +32,15 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct ChampionsCostumeManager {
-    costumes: Vec<String>,
+    costumes: Option<Vec<String>>,
     selected_costume: Option<String>,
 }
 
 impl ChampionsCostumeManager {
     fn new(_cc: &eframe::CreationContext) -> Self {
-        let costumes = get_saved_costumes(Path::new(COSTUME_SAVES_PATH));
         Self {
             selected_costume: None,
-            costumes,
+            costumes: None,
         }
     }
 }
@@ -86,22 +85,40 @@ impl eframe::App for ChampionsCostumeManager {
 
         // COSTUME SELECTION
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        for costume in &self.costumes {
-                            let costume_image = egui::Image::new(costume)
-                                .rounding(10.0)
-                                .fit_to_original_size(0.5)
-                                .maintain_aspect_ratio(true);
+            if let Some(costumes) = &self.costumes {
+                // DISPLAY COSTUMES
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            for costume in costumes {
+                                let costume_image = egui::Image::new(costume)
+                                    .rounding(10.0)
+                                    .fit_to_original_size(0.5)
+                                    .maintain_aspect_ratio(true);
 
-                            if ui.add(egui::ImageButton::new(costume_image)).clicked() {
-                                self.selected_costume = Some(costume.to_owned());
+                                if ui.add(egui::ImageButton::new(costume_image)).clicked() {
+                                    self.selected_costume = Some(costume.to_owned());
+                                }
+                            }
+                        });
+                });
+            } else {
+                // PROMPT FOR DIRECTORY SELECT
+                ui.with_layout(
+                    egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                    |ui| {
+                        let button = egui::Button::new("Select costumes directory");
+                        if ui.add(button).clicked() {
+                            if let Some(costumes_dir_path) = FileDialog::new()
+                                .set_directory(DEFAULT_COSTUME_DIR)
+                                .pick_folder() {
+                                self.costumes = Some(get_saved_costumes(&costumes_dir_path));
                             }
                         }
-                    });
-            });
+                    }
+                );
+            }
         });
     }
 }
