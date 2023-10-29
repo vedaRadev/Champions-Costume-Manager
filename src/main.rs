@@ -6,23 +6,10 @@ use std::{
 use eframe::egui;
 use rfd::FileDialog;
 
+mod costume;
+use costume::CostumeSave;
+
 const DEFAULT_COSTUME_DIR: &str = "/mnt/c/Program Files (x86)/Steam/steamapps/common/Champions Online/Champions Online/Live/screenshots";
-
-struct Record {
-    data_sets: Vec<DataSet>
-}
-
-struct DataSet {
-    tag: DataSetTag,
-    data: Vec<u8>,
-}
-
-struct DataSetTag {
-    tag_marker: u8,
-    record_number: u8,
-    data_set_number: u8,
-    data_field_octet_count: u16, // i.e. data field length in bytes
-}
 
 // TODO
 // * Only return files that are valid costume saves.
