@@ -252,6 +252,15 @@ impl CostumeSave {
         character_name_dataset.data = name.into();
     }
 
+    pub fn get_character_name(&self) -> String {
+        let character_name_dataset = &self.datasets.iter()
+            .filter(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SIGNATURE_DATA_SET_NUMBER)
+            .nth(1)
+            .unwrap();
+
+        std::str::from_utf8(&character_name_dataset.data).expect("Failed to parse utf8").to_string()
+    }
+
     pub fn set_account_name(&mut self, name: &str) {
         let account_name_dataset = &mut self.datasets.iter_mut()
             .filter(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SIGNATURE_DATA_SET_NUMBER)
@@ -260,6 +269,15 @@ impl CostumeSave {
 
         account_name_dataset.data_length = name.len() as u16;
         account_name_dataset.data = name.into();
+    }
+
+    pub fn get_account_name(&mut self) -> String {
+        let account_name_dataset = &mut self.datasets.iter_mut()
+            .filter(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SIGNATURE_DATA_SET_NUMBER)
+            .nth(0)
+            .unwrap();
+
+        std::str::from_utf8(&account_name_dataset.data).expect("Failed to parse utf8").to_string()
     }
 
     // TODO clean up this function

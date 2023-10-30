@@ -34,10 +34,17 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
+struct SelectedCostume {
+    file_path: String,
+    save_data: CostumeSave,
+    character_name: String,
+    account_name: String,
+}
+
 struct ChampionsCostumeManager {
     costumes_dir: String,
     costumes: Option<Vec<String>>,
-    selected_costume: Option<String>,
+    selected_costume: Option<SelectedCostume>,
 }
 
 impl ChampionsCostumeManager {
@@ -58,9 +65,9 @@ impl eframe::App for ChampionsCostumeManager {
             .resizable(false)
             .min_width(250.0)
             .show(ctx, |ui| {
-                if let Some(selected_costume) = &self.selected_costume {
+                if let Some(selected_costume) = &mut self.selected_costume {
                     ui.add(
-                        egui::Image::new(format!("file://{}", selected_costume))
+                        egui::Image::new(format!("file://{}", selected_costume.file_path))
                             .rounding(10.0)
                             .maintain_aspect_ratio(true)
                             .shrink_to_fit()
@@ -68,13 +75,21 @@ impl eframe::App for ChampionsCostumeManager {
 
                     ui.separator();
 
-                    ui.label("Placeholder Name");
-                    ui.label("Placeholder Character");
-                    ui.label("Placeholder Owner");
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                        ui.label("Account Name:");
+                        ui.add(egui::TextEdit::singleline(&mut selected_costume.account_name));
+                    });
+
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                        ui.label("Character Name:");
+                        ui.add(egui::TextEdit::singleline(&mut selected_costume.character_name));
+                    });
 
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_align(egui::Align::Center), |ui| {
-                        if ui.button("Edit").clicked() {
-                            // TODO
+                        if ui.button("Save").clicked() {
+                            selected_costume.save_data.set_account_name(&selected_costume.account_name);
+                            selected_costume.save_data.set_character_name(&selected_costume.character_name);
+                            selected_costume.save_data.write_to_file(Path::new(&selected_costume.file_path)).expect("Failed to write costume data");
                         }
 
                         if ui.button("Delete").clicked() {
@@ -96,32 +111,22 @@ impl eframe::App for ChampionsCostumeManager {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.horizontal_wrapped(|ui| {
-                            for costume in costumes {
-                                let costume_image = egui::Image::new(format!("file://{}", costume))
+                            for costume_path in costumes {
+                                let costume_image = egui::Image::new(format!("file://{}", costume_path))
                                     .rounding(10.0)
                                     .fit_to_original_size(0.5)
                                     .maintain_aspect_ratio(true);
 
                                 if ui.add(egui::ImageButton::new(costume_image)).clicked() {
-                                    self.selected_costume = Some(costume.to_owned());
+                                    // TODO recover from error
+                                    let mut save_data = CostumeSave::from_file(Path::new(costume_path)).expect("Failed to parse costume data");
 
-                                    // TODO strip out hacky demo code below
-                                    // Will need to set up actual text edit in the UI then save
-                                    // using user-supplied data
-                                    let mut costume_save = match CostumeSave::from_file(Path::new(costume)) {
-                                        Ok(costume_save) => costume_save,
-                                        Err(e) => panic!("Failed to parse costume save: {}", e)
-                                    };
-
-                                    costume_save.set_account_name("");
-                                    costume_save.set_character_name("RENAMED SAVE FILE");
-
-                                    let save_file = Path::new(&self.costumes_dir).join("Costume_test2.jpg");
-                                    println!("writing {}", save_file.to_str().unwrap());
-                                    match costume_save.write_to_file(&save_file) {
-                                        Ok(_) => println!("Success!"),
-                                        Err(e) => println!("Failed to write to file: {}", e)
-                                    }
+                                    self.selected_costume = Some(SelectedCostume {
+                                        file_path: costume_path.into(),
+                                        character_name: save_data.get_character_name(),
+                                        account_name: save_data.get_account_name(),
+                                        save_data,
+                                    });
                                 }
                             }
                         });
