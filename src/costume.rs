@@ -43,7 +43,12 @@ const VALIDITY_ID_CIPHER:  [u16; 256] = [
 ];
 
 const COSTUME_SIGNATURE_DATA_SET_NUMBER: u8 = 0x78;
-const COSTUME_DESCRIPTOR_DATA_SET_NUMBER: u8 = 0xCA;
+const COSTUME_SPECIFICATION_DATA_SET_NUMBER: u8 = 0xCA;
+const APP_13_SEGMENT_MARKER: [u8; 2] = [0xFF, 0xED];
+const APP_13_SEGMENT_ID: &[u8; 14] = b"Photoshop 3.0\0";
+const APP_13_SEGMENT_SIGNATURE: &[u8; 4] = b"8BIM";
+const APP_13_RESOURCE_ID: [u8; 2] = [0x04, 0x04];
+const APP_13_RESOURCE_NAME: [u8; 2] = [0x00, 0x00];
 
 // APP 13 Record DataSet
 struct DataSet {
@@ -87,60 +92,111 @@ impl DataSet {
         })
     }
 
-    fn write(&self, writer: &mut BufWriter<fs::File>) -> std::io::Result<()> {
-        writer.write_all(&[self.tag_marker])?;
-        writer.write_all(&[self.record_number])?;
-        writer.write_all(&[self.data_set_number])?;
-        writer.write_all(&self.data_length.to_be_bytes())?;
-        writer.write_all(&self.data)?;
-
-        Ok(())
+    fn as_bytes(&self) -> Vec<u8> {
+        [
+            self.tag_marker.to_be_bytes().as_slice(),
+            self.record_number.to_be_bytes().as_slice(),
+            self.data_set_number.to_be_bytes().as_slice(),
+            self.data_length.to_be_bytes().as_slice(),
+            self.data.as_slice()
+        ].concat()
     }
 }
 
 pub struct CostumeSave {
+    first_segments: Vec<u8>,
+    last_segments: Vec<u8>,
     datasets: Vec<DataSet>
 }
 
 impl CostumeSave {
     // TODO basic checks such as checking filetype for jpg, ensuring it's a valid costume from the
     // get-go, etc.
+    // TODO refactor since there's probably a better way to do this
     pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
-        /*
         let file = fs::File::open(path)?;
         let mut reader = BufReader::new(file);
 
-        let mut file_begin: Vec<u8> = Vec::with_capacity(2);
-        let mut file_end: Vec<u8> = vec![];
+        let mut first_segments: Vec<u8> = vec![0u8; 2];
+        let mut datasets: Vec<DataSet> = vec![];
+        let mut last_segments: Vec<u8> = vec![];
 
-        _ = reader.read_exact(&mut file_begin); // read in SOI
+        reader.read_exact(&mut first_segments)?; // read in SOI
         let mut app_13_segment_read = false;
-        while !reader.buffer().is_empty() {
+        loop {
             let mut segment = [0u8; 2];
-            let mut length = [0u8; 2];
+            let mut length_bytes = [0u8; 2];
             reader.read_exact(&mut segment)?;
-            reader.read_exact(&mut length)?;
-            let length = unsafe { std::mem::transmute::<[u8; 2], u16>(length).to_be() } as usize;
+            reader.read_exact(&mut length_bytes)?;
+            // Subtract 2 because the length includes the 2 bytes used to indicate the length
+            let length = unsafe { std::mem::transmute::<[u8; 2], u16>(length_bytes).to_be() } as usize - 2;
+            println!("Segment {:02X?} with length {}", segment, length);
 
             match segment {
-                [0xFF, 0xED] => {
+                APP_13_SEGMENT_MARKER => {
+                    let mut segment_id: Vec<u8> = vec![];
+                    reader.read_until(0x00, &mut segment_id)?;
+                    let segment_id = std::str::from_utf8(&segment_id).unwrap();
+                    println!("APP13 Segment ID: {}", segment_id);
+
+                    let mut segment_signature = [0u8; 4];
+                    reader.read_exact(&mut segment_signature)?;
+                    let segment_signature = std::str::from_utf8(&segment_signature).unwrap();
+                    println!("APP13 Segment signature: {}", segment_signature);
+
+                    // 0x0404 is IPTC-NAA record, contains "File Info..." information
+                    let mut resource_id = [0u8; 2];
+                    reader.read_exact(&mut resource_id)?;
+                    println!("Resource ID: {:04X?}", resource_id);
+
+                    // Costume saves don't utilize the Resource Name field so we'll skip.
+                    // 0x00 0x00 for null name.
+                    reader.seek_relative(2)?;
+
+                    let mut resource_length = [0u8; 4];
+                    reader.read_exact(&mut resource_length)?;
+                    let resource_length = unsafe { std::mem::transmute::<[u8; 4], u32>(resource_length).to_be() } as usize;
+                    println!("Resource length: {}", resource_length);
+
+                    let current_position = reader.stream_position()?;
+                    let end_of_segment = current_position + resource_length as u64;
+                    while reader.stream_position()? < end_of_segment {
+                        let dataset = DataSet::read(&mut reader)?;
+
+                        println!("\nDATASET");
+                        println!("Tag Marker: {:02X?}", dataset.tag_marker);
+                        println!("Record Number: {:02X?}", dataset.record_number);
+                        println!("Data Set Number: {:02X?}", dataset.data_set_number);
+                        println!("Data Length: {}", dataset.data_length);
+                        println!("Data: {}", unsafe { std::str::from_utf8_unchecked(&dataset.data) });
+
+                        datasets.push(dataset);
+                    }
+
                     app_13_segment_read = true;
                 },
                 _ => {
                     if !app_13_segment_read {
                         let mut data = vec![0u8; length];
                         reader.read_exact(&mut data)?;
-                        file_begin.extend(data.iter());
+                        first_segments.extend(segment.iter());
+                        first_segments.extend(length_bytes.iter());
+                        first_segments.extend(data.iter());
                     } else {
-                        reader.read_to_end(&mut file_end)?;
+                        last_segments.extend(segment.iter());
+                        last_segments.extend(length_bytes.iter());
+                        reader.read_to_end(&mut last_segments)?;
+                        break;
                     }
                 }
             }
         }
-        */
 
-        todo!()
-        // Ok(Self {})
+        Ok(Self {
+            first_segments,
+            last_segments,
+            datasets,
+        })
     }
 
     pub fn write_to_file(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
@@ -151,7 +207,6 @@ impl CostumeSave {
             .open(path)?;
         let mut writer = BufWriter::new(file);
 
-
         // Generate a new validity id and set our data
         let validity_id = self.generate_validity_id();
         let validity_id_dataset = &mut self.datasets.iter_mut()
@@ -161,13 +216,29 @@ impl CostumeSave {
         validity_id_dataset.data_length = validity_id.len() as u16;
         validity_id_dataset.data = validity_id.into();
 
-        // TODO
-        // Write SOI
-        // Write APP0
-        // Write APP13 Segment 
-        // // Recalculate APP 13 length
-        // Write rest of the data
-        
+        // Calculate APP13 length values
+        let app_13_resource_data = self.datasets.iter().map(|ds| ds.as_bytes()).collect::<Vec<Vec<u8>>>().concat();
+        let app_13_resource_length = app_13_resource_data.len() as u32;
+        let app_13_segment_length: u16 = APP_13_SEGMENT_ID.len() as u16
+            + APP_13_SEGMENT_SIGNATURE.len() as u16
+            + APP_13_RESOURCE_ID.len() as u16
+            + APP_13_RESOURCE_NAME.len() as u16
+            + app_13_resource_length as u16;
+
+        writer.write_all(&self.first_segments)?;
+
+        // write APP13 segment
+        writer.write_all(&APP_13_SEGMENT_MARKER)?;
+        writer.write_all(&app_13_segment_length.to_be_bytes())?;
+        writer.write_all(APP_13_SEGMENT_ID)?;
+        writer.write_all(APP_13_SEGMENT_SIGNATURE)?;
+        writer.write_all(&APP_13_RESOURCE_ID)?;
+        writer.write_all(&APP_13_RESOURCE_NAME)?;
+        writer.write_all(&app_13_resource_length.to_be_bytes())?;
+        writer.write_all(&self.datasets.iter().map(|ds| ds.as_bytes()).collect::<Vec<Vec<u8>>>().concat())?;
+
+        writer.write_all(&self.last_segments)?;
+
         Ok(())
     }
 
@@ -191,19 +262,21 @@ impl CostumeSave {
         account_name_dataset.data = name.into();
     }
 
+    // TODO clean up this function
+    // maybe have it return the i64 instead of a string
     fn generate_validity_id(&self) -> String {
-        let costume_descriptor = &self.datasets.iter()
-            .find(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_DESCRIPTOR_DATA_SET_NUMBER)
+        let costume_specification = &self.datasets.iter()
+            .find(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SPECIFICATION_DATA_SET_NUMBER)
             .unwrap();
 
         let mut upper_bits = std::num::Wrapping(0u16);
         let mut lower_bits = std::num::Wrapping(0u16);
 
-        for &byte in costume_descriptor.data.iter() {
+        for &byte in costume_specification.data.iter() {
             lower_bits += std::num::Wrapping(VALIDITY_ID_CIPHER[byte as usize]);
             upper_bits += lower_bits;
         }
 
-        format!("7799{}", (upper_bits.0 as u32) << 16 | (lower_bits.0 as u32))
+        format!("7799{}\0", (upper_bits.0 as i32) << 16 | (lower_bits.0 as i32))
     }
 }

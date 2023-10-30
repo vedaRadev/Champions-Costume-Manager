@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    io::{prelude::*, BufReader},
-    path::Path
-};
+use std::{ fs, path::Path };
 use eframe::egui;
 use rfd::FileDialog;
 
@@ -39,6 +35,7 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct ChampionsCostumeManager {
+    costumes_dir: String,
     costumes: Option<Vec<String>>,
     selected_costume: Option<String>,
 }
@@ -46,6 +43,7 @@ struct ChampionsCostumeManager {
 impl ChampionsCostumeManager {
     fn new(_cc: &eframe::CreationContext) -> Self {
         Self {
+            costumes_dir: String::from(""), // TODO make this an Option
             selected_costume: None,
             costumes: None,
         }
@@ -107,90 +105,22 @@ impl eframe::App for ChampionsCostumeManager {
                                 if ui.add(egui::ImageButton::new(costume_image)).clicked() {
                                     self.selected_costume = Some(costume.to_owned());
 
-                                    // GRAB RELEVANT METADATA
-                                    let file = fs::File::open(costume).expect("failed to open file");
-                                    let mut reader = BufReader::new(file);
+                                    // TODO strip out hacky demo code below
+                                    // Will need to set up actual text edit in the UI then save
+                                    // using user-supplied data
+                                    let mut costume_save = match CostumeSave::from_file(Path::new(costume)) {
+                                        Ok(costume_save) => costume_save,
+                                        Err(e) => panic!("Failed to parse costume save: {}", e)
+                                    };
 
-                                    // Skip to app13 data segment
-                                    let _ = reader.seek_relative(2); // skip SOI
-                                    loop {
-                                        let mut segment = [0u8; 2];
-                                        let mut length = [0u8; 2];
-                                        let _ = reader.read_exact(&mut segment);
-                                        let _ = reader.read_exact(&mut length);
-                                        let length = unsafe { std::mem::transmute::<[u8; 2], u16>(length).to_be() } as usize;
+                                    costume_save.set_account_name("");
+                                    costume_save.set_character_name("RENAMED SAVE FILE");
 
-                                        match segment {
-                                            [0xFF, 0xED] => {
-                                                println!("APP13 Segment Length: {}", length);
-
-                                                let mut segment_id: Vec<u8> = vec![];
-                                                let _ = reader.read_until(0x00, &mut segment_id);
-                                                let segment_id = std::str::from_utf8(&segment_id).unwrap();
-                                                println!("APP13 Segment ID: {}", segment_id);
-
-                                                let mut segment_signature = [0u8; 4];
-                                                let _ = reader.read_exact(&mut segment_signature);
-                                                let segment_signature = std::str::from_utf8(&segment_signature).unwrap();
-                                                println!("APP13 Segment signature: {}", segment_signature);
-
-                                                // 0x0404 is IPTC-NAA record, contains "File Info..." information
-                                                let mut resource_id = [0u8; 2];
-                                                let _ = reader.read_exact(&mut resource_id);
-                                                println!("Resource ID: {:04X?}", resource_id);
-
-                                                // Name: costume saves don't use these so it is
-                                                // 0x00 0x00 for null name. We'll just skip them.
-                                                let _ = reader.seek_relative(2);
-
-                                                let mut resource_length = [0u8; 4];
-                                                let _ = reader.read_exact(&mut resource_length);
-                                                let resource_length = unsafe { std::mem::transmute::<[u8; 4], u32>(resource_length).to_be() } as usize;
-                                                println!("Resource length: {}", resource_length);
-
-                                                /*
-                                                * SKIP READING IN THE APP13 RESOURCE DATA
-                                                * INSTEAD WE WILL PARSE RECORDS INDIVIDUALLY
-                                                */
-                                                // let mut resource_data = vec![0u8; resource_length];
-                                                // let _ = reader.read_exact(&mut resource_data);
-                                                // println!("{}", unsafe { std::str::from_utf8_unchecked(&resource_data) });
-
-                                                let current_position = reader.stream_position().expect("Failed to get position in file buffer");
-                                                let end_of_segment = current_position + resource_length as u64;
-                                                while reader.stream_position().expect("Failed to get position in buffer") < end_of_segment {
-                                                    println!();
-                                                    println!("RECORD");
-
-                                                    let mut tag_marker = [0u8; 1];
-                                                    let _ = reader.read_exact(&mut tag_marker);
-                                                    println!("Tag marker: {:02X?}", tag_marker);
-
-                                                    let mut record_number = [0u8; 1];
-                                                    let _ = reader.read_exact(&mut record_number);
-                                                    println!("Record number: {:02X?}", record_number);
-
-                                                    let mut data_set_number = [0u8; 1];
-                                                    let _ = reader.read_exact(&mut data_set_number);
-                                                    println!("Data set number: {:02X?}", data_set_number);
-
-                                                    let mut data_field_length = [0u8; 2];
-                                                    let _ = reader.read_exact(&mut data_field_length);
-                                                    let data_field_length = unsafe { std::mem::transmute::<[u8; 2], u16>(data_field_length).to_be() } as usize;
-                                                    println!("Data field length: {}", data_field_length);
-
-                                                    let mut data = vec![0u8; data_field_length];
-                                                    let _ = reader.read_exact(&mut data);
-                                                    let data = unsafe { std::str::from_utf8_unchecked(&data) };
-                                                    println!("Data: {}", data);
-                                                }
-
-                                                break;
-                                            },
-                                            _ => { 
-                                                let _ = reader.seek_relative(length as i64 - 2); 
-                                            }
-                                        }
+                                    let save_file = Path::new(&self.costumes_dir).join("Costume_test2.jpg");
+                                    println!("writing {}", save_file.to_str().unwrap());
+                                    match costume_save.write_to_file(&save_file) {
+                                        Ok(_) => println!("Success!"),
+                                        Err(e) => println!("Failed to write to file: {}", e)
                                     }
                                 }
                             }
@@ -203,10 +133,12 @@ impl eframe::App for ChampionsCostumeManager {
                     |ui| {
                         let button = egui::Button::new("Select costumes directory");
                         if ui.add(button).clicked() {
-                            if let Some(costumes_dir_path) = FileDialog::new()
+                            if let Some(costumes_dir) = FileDialog::new()
                                 .set_directory(DEFAULT_COSTUME_DIR)
                                 .pick_folder() {
-                                self.costumes = Some(get_saved_costumes(&costumes_dir_path));
+
+                                self.costumes_dir = costumes_dir.to_str().unwrap().to_string();
+                                self.costumes = Some(get_saved_costumes(&costumes_dir));
                             }
                         }
                     }
