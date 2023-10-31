@@ -238,7 +238,7 @@ impl CostumeSave {
         writer.write_all(&APP_13_RESOURCE_ID)?;
         writer.write_all(&APP_13_RESOURCE_NAME)?;
         writer.write_all(&app_13_resource_length.to_be_bytes())?;
-        writer.write_all(&self.datasets.iter().map(|ds| ds.as_bytes()).collect::<Vec<Vec<u8>>>().concat())?;
+        writer.write_all(&app_13_resource_data)?;
 
         writer.write_all(&self.last_segments)?;
 
