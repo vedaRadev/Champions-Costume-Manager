@@ -161,7 +161,8 @@ impl CostumeSave {
                     // println!("Resource length: {}", resource_length);
 
                     let current_position = reader.stream_position()?;
-                    let end_of_segment = current_position + resource_length as u64;
+                    // Subtract 2 because the length includes the 2 bytes used to indicate the length
+                    let end_of_segment = current_position + resource_length as u64 - 2;
                     while reader.stream_position()? < end_of_segment {
                         let dataset = DataSet::read(&mut reader)?;
 
