@@ -5,6 +5,8 @@ use std::{
     error::Error,
 };
 
+use chrono::prelude::*;
+
 // TODO insert leading 0's in front of hex numbers that aren't 4 characters long
 // ONLY DO THIS AFTER COSTUME RE-SAVING IS WORKING TO ENSURE IT DOESN'T BREAK FUNCTIONALITY
 const VALIDITY_ID_CIPHER:  [u16; 256] = [
@@ -130,24 +132,24 @@ impl CostumeSave {
             reader.read_exact(&mut length_bytes)?;
             // Subtract 2 because the length includes the 2 bytes used to indicate the length
             let length = unsafe { std::mem::transmute::<[u8; 2], u16>(length_bytes).to_be() } as usize - 2;
-            println!("Segment {:02X?} with length {}", segment, length);
+            // println!("Segment {:02X?} with length {}", segment, length);
 
             match segment {
                 APP_13_SEGMENT_MARKER => {
                     let mut segment_id: Vec<u8> = vec![];
                     reader.read_until(0x00, &mut segment_id)?;
                     let segment_id = std::str::from_utf8(&segment_id).unwrap();
-                    println!("APP13 Segment ID: {}", segment_id);
+                    // println!("APP13 Segment ID: {}", segment_id);
 
                     let mut segment_signature = [0u8; 4];
                     reader.read_exact(&mut segment_signature)?;
                     let segment_signature = std::str::from_utf8(&segment_signature).unwrap();
-                    println!("APP13 Segment signature: {}", segment_signature);
+                    // println!("APP13 Segment signature: {}", segment_signature);
 
                     // 0x0404 is IPTC-NAA record, contains "File Info..." information
                     let mut resource_id = [0u8; 2];
                     reader.read_exact(&mut resource_id)?;
-                    println!("Resource ID: {:04X?}", resource_id);
+                    // println!("Resource ID: {:04X?}", resource_id);
 
                     // Costume saves don't utilize the Resource Name field so we'll skip.
                     // 0x00 0x00 for null name.
@@ -156,19 +158,19 @@ impl CostumeSave {
                     let mut resource_length = [0u8; 4];
                     reader.read_exact(&mut resource_length)?;
                     let resource_length = unsafe { std::mem::transmute::<[u8; 4], u32>(resource_length).to_be() } as usize;
-                    println!("Resource length: {}", resource_length);
+                    // println!("Resource length: {}", resource_length);
 
                     let current_position = reader.stream_position()?;
                     let end_of_segment = current_position + resource_length as u64;
                     while reader.stream_position()? < end_of_segment {
                         let dataset = DataSet::read(&mut reader)?;
 
-                        println!("\nDATASET");
-                        println!("Tag Marker: {:02X?}", dataset.tag_marker);
-                        println!("Record Number: {:02X?}", dataset.record_number);
-                        println!("Data Set Number: {:02X?}", dataset.data_set_number);
-                        println!("Data Length: {}", dataset.data_length);
-                        println!("Data: {}", unsafe { std::str::from_utf8_unchecked(&dataset.data) });
+                        // println!("\nDATASET");
+                        // println!("Tag Marker: {:02X?}", dataset.tag_marker);
+                        // println!("Record Number: {:02X?}", dataset.record_number);
+                        // println!("Data Set Number: {:02X?}", dataset.data_set_number);
+                        // println!("Data Length: {}", dataset.data_length);
+                        // println!("Data: {}", unsafe { std::str::from_utf8_unchecked(&dataset.data) });
 
                         datasets.push(dataset);
                     }
@@ -297,4 +299,33 @@ impl CostumeSave {
 
         format!("7799{}\0", (upper_bits.0 as i32) << 16 | (lower_bits.0 as i32))
     }
+}
+
+const JAN_1_2000_UNIX_TIME: i64 = 946684800;
+pub fn to_simulated_save_name(file: &Path, account_name: &str, character_name: &str) -> String {
+    // If the last portion of a costume save's filename is a j2000 timestamp, separated from the rest
+    // by an underscore (_), then the game will convert this to a datetime string to display alongside
+    // the rest of the save name.
+    let maybe_j2000_timestamp = file
+        .file_stem().expect("Provided costume file path did not contain a file name")
+        .to_str().expect("Failed to convert the file name from an OsString to &str")
+        .split('_')
+        .last().expect("No last item in split string???")
+        .parse::<i64>();
+
+    let datetime_string = match maybe_j2000_timestamp {
+        Ok(j2000_timestamp) => {
+            let unix_timestamp = j2000_timestamp + JAN_1_2000_UNIX_TIME;
+            if let Some(utc_datetime) = NaiveDateTime::from_timestamp_opt(unix_timestamp, 0) {
+                utc_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+            } else {
+                String::from("")
+            }
+        },
+        Err(_) => String::from("")
+    };
+
+    format!("{}{} {}", account_name, character_name, datetime_string)
+        .trim_end()
+        .to_string()
 }

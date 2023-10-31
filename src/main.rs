@@ -85,6 +85,15 @@ impl eframe::App for ChampionsCostumeManager {
                         ui.add(egui::TextEdit::singleline(&mut selected_costume.character_name));
                     });
 
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Preview:");
+                        ui.label(costume::to_simulated_save_name(
+                            Path::new(&selected_costume.file_path),
+                            &selected_costume.account_name,
+                            &selected_costume.character_name
+                        ));
+                    });
+
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP).with_main_align(egui::Align::Center), |ui| {
                         if ui.button("Save").clicked() {
                             selected_costume.save_data.set_account_name(&selected_costume.account_name);
