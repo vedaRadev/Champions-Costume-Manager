@@ -45,6 +45,7 @@ struct ChampionsCostumeManager {
     costumes_dir: String,
     costumes: Option<Vec<String>>,
     selected_costume: Option<SelectedCostume>,
+    show_delete_confirmation: bool,
 }
 
 impl ChampionsCostumeManager {
@@ -53,6 +54,7 @@ impl ChampionsCostumeManager {
             costumes_dir: String::from(""), // TODO make this an Option
             selected_costume: None,
             costumes: None,
+            show_delete_confirmation: false,
         }
     }
 }
@@ -60,6 +62,38 @@ impl ChampionsCostumeManager {
 // TODO refactor to pull the image details and costume selection out into their own components
 impl eframe::App for ChampionsCostumeManager {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // COSTUME DELETION CONFIRMATION POPUP
+        // TODO: disable interactivity with other controls until popup is dealt with_layout
+        // NOTE: this should also really be checking that a costume is selected, not that we should
+        // be able to get into this state without one
+        if self.show_delete_confirmation {
+            let sr_size = ctx.screen_rect().size();
+
+            egui::Window::new("Delete Save?")
+                .collapsible(false)
+                .movable(false)
+                .resizable(false)
+                .title_bar(true)
+                .pivot(egui::Align2::CENTER_CENTER)
+                .fixed_pos([sr_size.x / 2.0, sr_size.y / 2.0])
+                .show(ctx, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                        if ui.button("Confirm").clicked() {
+                            let file_path = &self.selected_costume.as_ref().expect("No costume selected").file_path;
+                            fs::remove_file(file_path).expect("Failed to delete file");
+
+                            self.costumes = Some(get_saved_costumes(Path::new(&self.costumes_dir)));
+                            self.selected_costume = None;
+                            self.show_delete_confirmation = false;
+                        }
+
+                        if ui.button("Cancel").clicked() {
+                            self.show_delete_confirmation = false;
+                        }
+                    });
+                });
+        }
+
         // IMAGE DETAILS PANEL
         egui::SidePanel::right("costume_preview_panel")
             .resizable(false)
@@ -102,7 +136,7 @@ impl eframe::App for ChampionsCostumeManager {
                         }
 
                         if ui.button("Delete").clicked() {
-                            // TODO
+                            self.show_delete_confirmation = true;
                         }
                     });
                 } else {
@@ -115,38 +149,44 @@ impl eframe::App for ChampionsCostumeManager {
         // COSTUME SELECTION
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(costumes) = &self.costumes {
-                // DISPLAY COSTUMES
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            for costume_path in costumes {
-                                let costume_image = egui::Image::new(format!("file://{}", costume_path))
-                                    .rounding(10.0)
-                                    .fit_to_original_size(0.5)
-                                    .maintain_aspect_ratio(true);
+                if !costumes.is_empty() {
+                    // DISPLAY COSTUMES
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for costume_path in costumes {
+                                    let costume_image = egui::Image::new(format!("file://{}", costume_path))
+                                        .rounding(10.0)
+                                        .fit_to_original_size(0.5)
+                                        .maintain_aspect_ratio(true);
 
-                                if ui.add(egui::ImageButton::new(costume_image)).clicked() {
-                                    // TODO recover from error
-                                    let mut save_data = CostumeSave::from_file(Path::new(costume_path)).expect("Failed to parse costume data");
+                                    if ui.add(egui::ImageButton::new(costume_image)).clicked() {
+                                        let mut save_data = CostumeSave::from_file(Path::new(costume_path)).expect("Failed to parse costume data");
 
-                                    self.selected_costume = Some(SelectedCostume {
-                                        file_path: costume_path.into(),
-                                        character_name: save_data.get_character_name(),
-                                        account_name: save_data.get_account_name(),
-                                        save_data,
-                                    });
+                                        self.selected_costume = Some(SelectedCostume {
+                                            file_path: costume_path.into(),
+                                            character_name: save_data.get_character_name(),
+                                            account_name: save_data.get_account_name(),
+                                            save_data,
+                                        });
+                                    }
                                 }
-                            }
+                            });
                         });
-                });
+                } else {
+                    // INFORM NO SAVES
+                    ui.with_layout(
+                        egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                        |ui| ui.label("No costumes found")
+                    );
+                }
             } else {
                 // PROMPT FOR DIRECTORY SELECT
                 ui.with_layout(
                     egui::Layout::centered_and_justified(egui::Direction::TopDown),
                     |ui| {
-                        let button = egui::Button::new("Select costumes directory");
-                        if ui.add(button).clicked() {
+                        if ui.button("Select costumes directory").clicked() {
                             if let Some(costumes_dir) = FileDialog::new()
                                 .set_directory(DEFAULT_COSTUME_DIR)
                                 .pick_folder() {
