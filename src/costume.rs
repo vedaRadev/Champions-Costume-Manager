@@ -283,6 +283,25 @@ impl CostumeSave {
         std::str::from_utf8(&account_name_dataset.data).expect("Failed to parse utf8").to_string()
     }
 
+    pub fn get_costume_specification(&mut self) -> String {
+        let costume_specification_dataset = &mut self.datasets.iter_mut()
+            .filter(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SPECIFICATION_DATA_SET_NUMBER)
+            .nth(0)
+            .unwrap();
+
+        std::str::from_utf8(&costume_specification_dataset.data).expect("Failed to parse utf8").to_string()
+    }
+
+    pub fn set_costume_specification(&mut self, specification: &str) {
+        let costume_specification_dataset = &mut self.datasets.iter_mut()
+            .filter(|DataSet { data_set_number, .. }| *data_set_number == COSTUME_SPECIFICATION_DATA_SET_NUMBER)
+            .nth(0)
+            .unwrap();
+
+        costume_specification_dataset.data_length = specification.len() as u16;
+        costume_specification_dataset.data = specification.into();
+    }
+
     // TODO clean up this function
     // maybe have it return the i64 instead of a string
     fn generate_validity_id(&self) -> String {

@@ -39,13 +39,16 @@ struct SelectedCostume {
     save_data: CostumeSave,
     character_name: String,
     account_name: String,
+    costume_specification: String,
 }
 
+// TODO implement state machine for central panel state. Could also maybe do this for popups too.
 struct ChampionsCostumeManager {
     costumes_dir: String,
     costumes: Option<Vec<String>>,
     selected_costume: Option<SelectedCostume>,
     show_delete_confirmation: bool,
+    show_edit_costume_specification: bool,
 }
 
 impl ChampionsCostumeManager {
@@ -55,6 +58,7 @@ impl ChampionsCostumeManager {
             selected_costume: None,
             costumes: None,
             show_delete_confirmation: false,
+            show_edit_costume_specification: false,
         }
     }
 }
@@ -91,6 +95,52 @@ impl eframe::App for ChampionsCostumeManager {
                             self.show_delete_confirmation = false;
                         }
                     });
+                });
+        }
+
+        // COSTUME SPECIFICATION POPUP
+        // TODO: disable interactivity with other controls until popup is dealt with_layout
+        // NOTE: this should also really be checking that a costume is selected, not that we should
+        // be able to get into this state without one
+        if self.show_edit_costume_specification {
+            let sr_size = ctx.screen_rect().size();
+            let win_size = egui::vec2(sr_size.x - 50.0, sr_size.y - 50.0);
+
+            egui::Window::new("Costume Specification")
+                .collapsible(false)
+                .movable(false)
+                .resizable(false)
+                .constrain(true)
+                .title_bar(true)
+                .fixed_size(win_size)
+                .vscroll(true)
+                .pivot(egui::Align2::CENTER_CENTER)
+                .default_pos([sr_size.x / 2.0, sr_size.y / 2.0])
+                .show(ctx, |ui| {
+                    let selected_costume = &mut self.selected_costume.as_mut().unwrap();
+
+                    // FIXME: Putting the buttons above the editor for now because I can't figure
+                    // out how to not make the editor freak out in the other orientation
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                        if ui.button("Save Specification").clicked() {
+                            selected_costume.save_data.set_costume_specification(&selected_costume.costume_specification);
+                            self.show_edit_costume_specification = false;
+                        }
+
+                        if ui.button("Cancel").clicked() {
+                            self.show_edit_costume_specification = false;
+                        }
+                    });
+
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([true, true])
+                        .show(ui, |ui| {
+                            ui.add_sized(
+                                ui.available_size(),
+                                egui::TextEdit::multiline(&mut selected_costume.costume_specification)
+                                    .code_editor()
+                            );
+                        });
                 });
         }
 
@@ -138,6 +188,10 @@ impl eframe::App for ChampionsCostumeManager {
                         if ui.button("Delete").clicked() {
                             self.show_delete_confirmation = true;
                         }
+
+                        if ui.button("Show Costume Specification").clicked() {
+                            self.show_edit_costume_specification = true;
+                        }
                     });
                 } else {
                     ui.centered_and_justified(|ui| {
@@ -168,6 +222,7 @@ impl eframe::App for ChampionsCostumeManager {
                                             file_path: costume_path.into(),
                                             character_name: save_data.get_character_name(),
                                             account_name: save_data.get_account_name(),
+                                            costume_specification: save_data.get_costume_specification(),
                                             save_data,
                                         });
                                     }
